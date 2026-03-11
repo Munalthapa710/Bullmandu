@@ -11,6 +11,9 @@ describe("analysis engine", () => {
     expect(result.predictionChart.length).toBeGreaterThan(0);
     expect(result.confidence).toBeGreaterThanOrEqual(35);
     expect(result.confidence).toBeLessThanOrEqual(91);
+    expect(result.backtest.sampleSize).toBeGreaterThanOrEqual(0);
+    expect(result.backtest.directionalAccuracy).toBeGreaterThan(0);
+    expect(result.backtest.meanAbsoluteErrorPercent).toBeGreaterThan(0);
   });
 
   it("estimates timeframe buckets", () => {
@@ -35,6 +38,29 @@ describe("analysis engine", () => {
     expect(Number.isFinite(result.percentageMove)).toBe(true);
     expect(Number.isFinite(result.indicators.support)).toBe(true);
     expect(Number.isFinite(result.indicators.resistance)).toBe(true);
+    expect(Number.isFinite(result.backtest.directionalAccuracy)).toBe(true);
     expect(result.riskNote.includes("Infinity")).toBe(false);
+  });
+
+  it("backtests trending data with measurable accuracy", () => {
+    const history = Array.from({ length: 140 }, (_, index) => ({
+      date: `2025-01-${String((index % 28) + 1).padStart(2, "0")}`,
+      close: 100 + index * 1.4,
+      volume: 1000 + index * 10
+    }));
+
+    const result = analyzeStock({
+      symbol: "TEST",
+      companyName: "Test Trend Corp",
+      sector: "Test",
+      currentPrice: history.at(-1)!.close,
+      previousClose: history.at(-2)!.close,
+      volume: history.at(-1)!.volume,
+      history
+    });
+
+    expect(result.backtest.sampleSize).toBeGreaterThan(5);
+    expect(result.backtest.directionalAccuracy).toBeGreaterThanOrEqual(60);
+    expect(result.backtest.meanAbsoluteErrorPercent).toBeLessThan(15);
   });
 });

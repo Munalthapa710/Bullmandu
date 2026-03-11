@@ -40,6 +40,14 @@ export function AnalysisSummary({
         <Metric label="Target Timeframe" value={analysis.timeframe} />
         <Metric label="Estimated Target Date" value={analysis.estimatedTargetDate ?? "Scenario-based"} />
         <Metric label="Confidence" value={`${analysis.confidence.toFixed(0)}%`} />
+        <Metric
+          label={`${analysis.backtest.horizonDays}-Day Backtest Accuracy`}
+          value={`${analysis.backtest.directionalAccuracy.toFixed(0)}%`}
+        />
+        <Metric
+          label="Backtest Avg Error"
+          value={`${analysis.backtest.meanAbsoluteErrorPercent.toFixed(2)}%`}
+        />
         <Metric label="Risk Note" value={analysis.riskNote} compact />
       </Card>
     </div>

@@ -11,7 +11,62 @@ import {
   volatility,
   volumeTrend
 } from "@/lib/analysis/indicators";
-import type { AnalysisResult, PredictionPoint, Recommendation, StockQuote } from "@/types";
+import type {
+  AnalysisResult,
+  BacktestMetrics,
+  PredictionPoint,
+  Recommendation,
+  StockQuote
+} from "@/types";
+
+const BACKTEST_HORIZONS = [5, 10, 20] as const;
+const DEFAULT_BACKTEST_HORIZON = 10;
+
+type SectorProfile = {
+  trendWeight: number;
+  meanReversionWeight: number;
+  confidenceBias: number;
+  thresholdShift: number;
+  volatilityTolerance: number;
+};
+
+const SECTOR_PROFILES: Record<string, SectorProfile> = {
+  Banking: {
+    trendWeight: 1.06,
+    meanReversionWeight: 0.94,
+    confidenceBias: 3,
+    thresholdShift: -2,
+    volatilityTolerance: 1.1
+  },
+  Hydropower: {
+    trendWeight: 0.94,
+    meanReversionWeight: 1.08,
+    confidenceBias: -3,
+    thresholdShift: 3,
+    volatilityTolerance: 0.85
+  },
+  Insurance: {
+    trendWeight: 0.98,
+    meanReversionWeight: 1.03,
+    confidenceBias: -1,
+    thresholdShift: 1,
+    volatilityTolerance: 0.92
+  },
+  Manufacturing: {
+    trendWeight: 1.02,
+    meanReversionWeight: 0.98,
+    confidenceBias: 1,
+    thresholdShift: 0,
+    volatilityTolerance: 0.96
+  },
+  Telecommunications: {
+    trendWeight: 0.92,
+    meanReversionWeight: 1.1,
+    confidenceBias: -1,
+    thresholdShift: 1,
+    volatilityTolerance: 1
+  }
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -24,6 +79,18 @@ function finiteOr(value: number, fallback: number) {
 function roundFinite(value: number, fallback: number, digits = 2) {
   const safeValue = finiteOr(value, fallback);
   return Number(safeValue.toFixed(digits));
+}
+
+function getSectorProfile(sector: string): SectorProfile {
+  return (
+    SECTOR_PROFILES[sector] ?? {
+      trendWeight: 1,
+      meanReversionWeight: 1,
+      confidenceBias: 0,
+      thresholdShift: 0,
+      volatilityTolerance: 1
+    }
+  );
 }
 
 function buildStableHistory(stock: StockQuote) {
@@ -58,11 +125,11 @@ function buildStableHistory(stock: StockQuote) {
   return [...filler, ...cleaned, { date: "synthetic-current", close: safeCurrentPrice, volume: stock.volume }];
 }
 
-function buildRecommendation(score: number): Recommendation {
-  if (score >= 75) return "Strong Buy";
-  if (score >= 60) return "Buy";
-  if (score >= 45) return "Hold";
-  if (score >= 30) return "Sell";
+function buildRecommendation(score: number, thresholdShift = 0): Recommendation {
+  if (score >= 75 + thresholdShift) return "Strong Buy";
+  if (score >= 60 + thresholdShift) return "Buy";
+  if (score >= 45 + thresholdShift) return "Hold";
+  if (score >= 30 + thresholdShift) return "Sell";
   return "Strong Sell";
 }
 
@@ -95,7 +162,177 @@ function predictionCurve(lastPrice: number, targetPrice: number, days: number) {
   return points;
 }
 
-export function analyzeStock(stock: StockQuote): AnalysisResult {
+function emptyBacktest(): BacktestMetrics {
+  return {
+    horizonDays: DEFAULT_BACKTEST_HORIZON,
+    sampleSize: 0,
+    directionalAccuracy: 50,
+    meanAbsoluteErrorPercent: 12,
+    biasPercent: 0
+  };
+}
+
+function inferSignalStrength(recommendation: Recommendation) {
+  switch (recommendation) {
+    case "Strong Buy":
+      return 2;
+    case "Buy":
+      return 1;
+    case "Hold":
+      return 0;
+    case "Sell":
+      return -1;
+    case "Strong Sell":
+      return -2;
+  }
+}
+
+function evaluateHorizonBacktest(stock: StockQuote, horizonDays: number): BacktestMetrics {
+  const history = buildStableHistory(stock).filter((point) => !point.date.startsWith("synthetic-"));
+  if (history.length < 90) {
+    return emptyBacktest();
+  }
+
+  const startIndex = 60;
+  const results: Array<{ hit: boolean; absoluteErrorPercent: number; biasPercent: number }> = [];
+
+  for (let endIndex = startIndex; endIndex + horizonDays <= history.length; endIndex += 5) {
+    const slice = history.slice(0, endIndex);
+    const current = slice.at(-1);
+    const previous = slice.at(-2);
+    const futurePoint = history[endIndex + horizonDays - 1];
+
+    if (!current || !previous || !futurePoint || current.close <= 0) {
+      continue;
+    }
+
+    const sliceAnalysis = analyzeStockInternal(
+      {
+        symbol: stock.symbol,
+        companyName: stock.companyName,
+        sector: stock.sector,
+        currentPrice: current.close,
+        previousClose: previous.close,
+        volume: current.volume,
+        history: slice
+      },
+      false
+    );
+
+    const predictedMove = sliceAnalysis.predictedPrice - current.close;
+    const actualMove = futurePoint.close - current.close;
+    const predictedSignal = Math.sign(predictedMove);
+    const actualSignal = Math.sign(actualMove);
+    const recommendationSignal = Math.sign(inferSignalStrength(sliceAnalysis.recommendation));
+    const hit =
+      Math.abs(actualMove / current.close) < 0.01
+        ? Math.abs(predictedMove / current.close) < 0.01
+        : predictedSignal === actualSignal || recommendationSignal === actualSignal;
+    const absoluteErrorPercent = (Math.abs(sliceAnalysis.predictedPrice - futurePoint.close) / current.close) * 100;
+    const biasPercent = ((sliceAnalysis.predictedPrice - futurePoint.close) / current.close) * 100;
+
+    if (!Number.isFinite(absoluteErrorPercent) || !Number.isFinite(biasPercent)) {
+      continue;
+    }
+
+    results.push({
+      hit,
+      absoluteErrorPercent,
+      biasPercent
+    });
+  }
+
+  if (!results.length) {
+    return {
+      ...emptyBacktest(),
+      horizonDays
+    };
+  }
+
+  const directionalAccuracy =
+    (results.filter((result) => result.hit).length / Math.max(results.length, 1)) * 100;
+  const meanAbsoluteErrorPercent =
+    results.reduce((sum, result) => sum + result.absoluteErrorPercent, 0) / results.length;
+  const biasPercent = results.reduce((sum, result) => sum + result.biasPercent, 0) / results.length;
+
+  return {
+    horizonDays,
+    sampleSize: results.length,
+    directionalAccuracy: roundFinite(directionalAccuracy, 50),
+    meanAbsoluteErrorPercent: roundFinite(meanAbsoluteErrorPercent, 12),
+    biasPercent: roundFinite(biasPercent, 0)
+  };
+}
+
+function evaluateBacktest(stock: StockQuote): BacktestMetrics {
+  const profiles = BACKTEST_HORIZONS.map((horizonDays) => evaluateHorizonBacktest(stock, horizonDays)).filter(
+    (result) => result.sampleSize > 0
+  );
+
+  if (!profiles.length) {
+    return emptyBacktest();
+  }
+
+  const best = [...profiles].sort((left, right) => {
+    const leftScore = left.directionalAccuracy - left.meanAbsoluteErrorPercent * 1.6;
+    const rightScore = right.directionalAccuracy - right.meanAbsoluteErrorPercent * 1.6;
+    return rightScore - leftScore;
+  })[0];
+
+  const totalSamples = profiles.reduce((sum, result) => sum + result.sampleSize, 0);
+  const weightedDirectionalAccuracy =
+    profiles.reduce((sum, result) => sum + result.directionalAccuracy * result.sampleSize, 0) /
+    Math.max(totalSamples, 1);
+  const weightedMeanAbsoluteErrorPercent =
+    profiles.reduce((sum, result) => sum + result.meanAbsoluteErrorPercent * result.sampleSize, 0) /
+    Math.max(totalSamples, 1);
+  const weightedBiasPercent =
+    profiles.reduce((sum, result) => sum + result.biasPercent * result.sampleSize, 0) / Math.max(totalSamples, 1);
+
+  return {
+    horizonDays: best.horizonDays,
+    sampleSize: totalSamples,
+    directionalAccuracy: roundFinite(weightedDirectionalAccuracy, 50),
+    meanAbsoluteErrorPercent: roundFinite(weightedMeanAbsoluteErrorPercent, 12),
+    biasPercent: roundFinite(weightedBiasPercent, 0)
+  };
+}
+
+function deriveConfidence(
+  structuralConfidence: number,
+  backtest: BacktestMetrics,
+  volatilityValue: number,
+  currentPrice: number,
+  safeSupport: number,
+  safeResistance: number
+) {
+  const accuracyComponent = backtest.directionalAccuracy * 0.46;
+  const errorComponent = clamp(100 - backtest.meanAbsoluteErrorPercent * 3.1, 20, 100) * 0.24;
+  const sampleComponent = clamp(backtest.sampleSize * 1.2, 8, 100) * 0.12;
+  const structureComponent = structuralConfidence * 0.18;
+  const biasPenalty = clamp(Math.abs(backtest.biasPercent) * 0.7, 0, 10);
+  const barrierPenalty =
+    currentPrice >= safeResistance * 0.995 || currentPrice <= safeSupport * 1.005 ? 4 : 0;
+  const volatilityPenalty = clamp(volatilityValue * 0.22, 0, 12);
+
+  return clamp(
+    roundFinite(
+      accuracyComponent +
+        errorComponent +
+        sampleComponent +
+        structureComponent -
+        biasPenalty -
+        barrierPenalty -
+        volatilityPenalty,
+      structuralConfidence
+    ),
+    35,
+    91
+  );
+}
+
+function analyzeStockInternal(stock: StockQuote, includeBacktest: boolean): AnalysisResult {
+  const sectorProfile = getSectorProfile(stock.sector);
   const stableHistory = buildStableHistory(stock);
   const closes = stableHistory.map((point) => point.close);
   const volumes = stableHistory.map((point) => point.volume);
@@ -129,35 +366,70 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
   score += trendSlope > 0 ? 8 : -8;
   score += volumeTrendValue > 0.08 ? 6 : volumeTrendValue < -0.08 ? -6 : 0;
   score += currentPrice < bands.lower ? 7 : currentPrice > bands.upper ? -7 : 0;
+  score += currentPrice <= safeSupport * 1.02 ? 5 : 0;
+  score += currentPrice >= safeResistance * 0.98 ? -5 : 0;
+  score += trendSlope * 6 * (sectorProfile.trendWeight - 1);
+  score -= Math.max(volatilityValue - 12 * sectorProfile.volatilityTolerance, 0) * 0.35;
 
-  const recommendation = buildRecommendation(clamp(score, 0, 100));
-  const baseProjection = currentPrice + trendSlope * 8 + momentumValue * 0.35;
-  const regressionProjection = currentPrice + trendSlope * 15;
-  const resistanceAdjusted = Math.min(regressionProjection, safeResistance * 1.04);
-  const supportAdjusted = Math.max(baseProjection, safeSupport * 0.97);
+  const baseRecommendation = buildRecommendation(clamp(score, 0, 100), sectorProfile.thresholdShift);
+  const slopeProjection = currentPrice + trendSlope * 8 * sectorProfile.trendWeight;
+  const horizonProjection =
+    currentPrice +
+    trendSlope * DEFAULT_BACKTEST_HORIZON * sectorProfile.trendWeight +
+    momentumValue * 0.15;
+  const meanReversionProjection =
+    currentPrice + momentumValue * 0.25 + (sma20 - currentPrice) * 0.2 * sectorProfile.meanReversionWeight;
+  const macdProjection = currentPrice + (ema12 - ema26) * 3.5 + macdSet.histogram * 0.8;
+  const boundedBullishTarget = Math.min(
+    Math.max(slopeProjection, meanReversionProjection),
+    safeResistance * 1.03
+  );
+  const boundedBearishTarget = Math.max(
+    Math.min(slopeProjection, meanReversionProjection),
+    safeSupport * 0.97
+  );
+  const directionalTarget =
+    baseRecommendation === "Strong Buy" || baseRecommendation === "Buy"
+      ? boundedBullishTarget
+      : baseRecommendation === "Strong Sell" || baseRecommendation === "Sell"
+        ? boundedBearishTarget
+        : currentPrice + trendSlope * 5;
   const predictedPrice = roundFinite(
-    (
-      resistanceAdjusted * 0.4 +
-      supportAdjusted * 0.3 +
-      (currentPrice + (ema12 - ema26) * 4) * 0.3
-    ),
+    horizonProjection * 0.42 + directionalTarget * 0.33 + meanReversionProjection * 0.15 + macdProjection * 0.1,
     currentPrice
   );
   const rupeeMove = roundFinite(predictedPrice - currentPrice, 0);
   const percentageMove = roundFinite(currentPrice === 0 ? 0 : (rupeeMove / currentPrice) * 100, 0);
-  const confidence = clamp(
+  const structuralConfidence = clamp(
     roundFinite(
-      (
-        62 +
-        (trendSlope > 0 ? 6 : -4) +
-        (Math.abs(macdSet.histogram) > 2 ? 5 : 0) -
-        volatilityValue * 0.45 +
-        volumeTrendValue * 100 * 0.1
-      ),
+      58 +
+        (trendSlope > 0 ? 5 : -4) +
+        (Math.abs(macdSet.histogram) > 1 ? 4 : 0) -
+        volatilityValue * (0.32 / sectorProfile.volatilityTolerance) +
+        volumeTrendValue * 100 * 0.08 +
+        sectorProfile.confidenceBias,
       55
     ),
     35,
-    91
+    90
+  );
+  const backtest = includeBacktest ? evaluateBacktest(stock) : emptyBacktest();
+  const calibratedScore = clamp(
+    score +
+      (backtest.directionalAccuracy - 50) * 0.18 -
+      (backtest.meanAbsoluteErrorPercent - 8) * 1.2 -
+      Math.abs(backtest.biasPercent) * 0.45,
+    0,
+    100
+  );
+  const recommendation = buildRecommendation(calibratedScore, sectorProfile.thresholdShift);
+  const confidence = deriveConfidence(
+    structuralConfidence,
+    backtest,
+    volatilityValue,
+    currentPrice,
+    safeSupport,
+    safeResistance
   );
   const timeframeMeta = estimateTimeframe(percentageMove, trendSlope, volatilityValue);
   const estimatedTargetDate = addTradingDays(timeframeMeta.days);
@@ -171,9 +443,9 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
 
   const simpleExplanation = `${stock.symbol} looks ${recommendation.toLowerCase()} because price is ${currentPrice > sma20 ? "above" : "below"} key moving averages, RSI is ${rsi14.toFixed(0)}, and momentum is ${momentumValue >= 0 ? "improving" : "weakening"}.`;
   const advancedExplanation = [
-    `The weighted model scores trend, momentum, mean reversion, and participation.`,
+    `The weighted model scores trend, momentum, mean reversion, and participation, then calibrates the output using sector regime rules.`,
     `Price vs SMA20/SMA50 is ${currentPrice > sma20 && currentPrice > sma50 ? "constructive" : "mixed"}, MACD histogram is ${macdSet.histogram >= 0 ? "positive" : "negative"}, and volume trend is ${(volumeTrendValue * 100).toFixed(1)}%.`,
-    `The target blends short moving-average projection, recent regression slope, and nearby support/resistance zones to keep the estimate practical for NEPSE-style liquidity conditions.`
+    `Confidence is calibrated by multi-horizon rolling backtests, with ${backtest.sampleSize} total windows and a best-fit horizon of ${backtest.horizonDays} trading days. Directional accuracy is ${backtest.directionalAccuracy.toFixed(0)}% and mean absolute error is ${backtest.meanAbsoluteErrorPercent.toFixed(2)}%.`
   ].join(" ");
 
   return {
@@ -205,6 +477,7 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
     },
     recommendation,
     confidence,
+    backtest,
     predictedPrice,
     rupeeMove,
     percentageMove,
@@ -218,4 +491,8 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
     liveChart: [],
     liveSources: []
   };
+}
+
+export function analyzeStock(stock: StockQuote): AnalysisResult {
+  return analyzeStockInternal(stock, true);
 }

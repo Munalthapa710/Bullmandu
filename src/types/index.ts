@@ -63,6 +63,14 @@ export type PredictionPoint = {
   predictedClose: number;
 };
 
+export type BacktestMetrics = {
+  horizonDays: number;
+  sampleSize: number;
+  directionalAccuracy: number;
+  meanAbsoluteErrorPercent: number;
+  biasPercent: number;
+};
+
 export type AnalysisResult = {
   symbol: string;
   companyName: string;
@@ -74,6 +82,7 @@ export type AnalysisResult = {
   indicators: TechnicalIndicators;
   recommendation: Recommendation;
   confidence: number;
+  backtest: BacktestMetrics;
   predictedPrice: number;
   rupeeMove: number;
   percentageMove: number;
