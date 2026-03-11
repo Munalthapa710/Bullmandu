@@ -23,28 +23,29 @@ export function BullLogo({
         xmlns="http://www.w3.org/2000/svg"
       >
         <path
-          d="M12 21C17 14 23 11 29 11L24 4C33 6 38 10 41 16C45 12 50 10 56 9L51 18C54 20 56 24 56 29C56 38 49 45 40 45H24C15 45 8 38 8 29C8 26 9 23 12 21Z"
-          className="fill-current"
-          opacity="0.16"
-        />
-        <path
-          d="M16 23C20 18 25 16 31 16C37 16 43 18 48 23M20 23L24 12M44 23L40 12"
+          d="M11 16H18.5C18.5 22.8 21.3 28.1 26.8 31.4C29.8 29.4 33.1 28.4 36 28.4C38.9 28.4 42.2 29.4 45.2 31.4C50.7 28.1 53.5 22.8 53.5 16H61C61 24.7 57.2 31.9 49.9 36.4L53.7 40.1L49.1 44.7L43.9 39.6C41.5 40.6 38.9 41.1 36 41.1C33.1 41.1 30.5 40.6 28.1 39.6L22.9 44.7L18.3 40.1L22.1 36.4C14.8 31.9 11 24.7 11 16Z"
           stroke="currentColor"
-          strokeWidth="3.5"
+          strokeWidth="3.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
-          d="M18 29C18 22.925 22.925 18 29 18H35C42.18 18 48 23.82 48 31C48 38.18 42.18 44 35 44H29C22.925 44 18 39.075 18 33V29Z"
+          d="M25.5 50L21.1 40.8V34.8L25.3 30.7L32 33.9L38.7 30.7L42.9 34.8V40.8L38.5 50H25.5Z"
           stroke="currentColor"
-          strokeWidth="3.5"
+          strokeWidth="3.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
-          d="M23 30H43M23 36H39"
+          d="M23 29.9C27.5 33 31.4 34.4 36 34.4C40.6 34.4 44.5 33 49 29.9"
           stroke="currentColor"
-          strokeWidth="3.5"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M20.4 32.8C25.1 28.8 30 27 36 27C42 27 46.9 28.8 51.6 32.8"
+          stroke="currentColor"
+          strokeWidth="3.2"
           strokeLinecap="round"
         />
       </svg>
