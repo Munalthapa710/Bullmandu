@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BullLogo } from "@/components/branding/bull-logo";
 import { Button, Card, Input } from "@/components/ui";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -35,11 +36,15 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
   return (
     <Card className="w-full max-w-md space-y-5">
-      <div>
-        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">NEPSE Analysis Platform</p>
+      <div className="flex items-start gap-4">
+        <BullLogo />
+        <div>
+        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">BullMandu</p>
         <h1 className="mt-2 text-3xl font-semibold text-ink">
           {mode === "login" ? "Sign in" : "Create account"}
         </h1>
+        <p className="mt-2 text-sm text-slate-500">NEPSE analysis with a bull-market lens.</p>
+        </div>
       </div>
 
       <form className="space-y-4" onSubmit={handleSubmit}>

@@ -3,6 +3,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { LogOut, Menu } from "lucide-react";
 import { useState } from "react";
+import { BullLogo } from "@/components/branding/bull-logo";
 import { Button } from "@/components/ui";
 
 export function Topbar({
@@ -30,8 +31,9 @@ export function Topbar({
         >
           <Menu className="h-5 w-5" />
         </button>
+        <BullLogo className="hidden md:flex" compact />
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Market Console</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">BullMandu</p>
           <h2 className="text-xl font-semibold text-ink">Hello, {name}</h2>
         </div>
       </div>

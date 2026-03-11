@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Clock3, LayoutDashboard, LineChart, Settings, Star, Waves } from "lucide-react";
+import { BullLogo } from "@/components/branding/bull-logo";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -20,10 +21,10 @@ export function Sidebar() {
   return (
     <aside className="flex h-full flex-col rounded-[28px] border border-white/60 bg-[#0f2724] p-5 text-white shadow-card">
       <div className="flex items-center gap-3">
-        <div className="rounded-2xl bg-accent px-3 py-2 text-sm font-bold">SA</div>
+        <BullLogo className="bg-white/10 text-[#7ff2c8]" compact />
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-white/50">NEPSE</p>
-          <h1 className="text-xl font-semibold">ShareAnalysis</h1>
+          <p className="text-sm uppercase tracking-[0.24em] text-white/50">BullMandu</p>
+          <h1 className="text-xl font-semibold">NEPSE Intelligence</h1>
         </div>
       </div>
 

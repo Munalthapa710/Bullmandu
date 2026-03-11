@@ -8,8 +8,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "ShareAnalysis",
-  description: "NEPSE stock analysis platform with explainable forecasts and watchlists."
+  title: "BullMandu",
+  description: "BullMandu is a NEPSE stock analysis platform with explainable forecasts and watchlists."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
