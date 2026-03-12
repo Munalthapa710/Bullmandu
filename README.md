@@ -1,6 +1,6 @@
 # ShareAnalysis
 
-ShareAnalysis is a production-oriented NEPSE stock analysis platform built with Next.js, TypeScript, Tailwind CSS, Prisma, SQLite, and a mock-friendly market data abstraction layer.
+ShareAnalysis is a production-oriented NEPSE stock analysis platform built with Next.js, TypeScript, Tailwind CSS, Prisma, PostgreSQL, and a mock-friendly market data abstraction layer.
 
 This analysis is for educational and informational purposes only and should not be treated as guaranteed investment advice.
 
@@ -9,7 +9,7 @@ This analysis is for educational and informational purposes only and should not 
 - Secure register/login flow with signed JWT session cookies and bcrypt password hashing
 - Dashboard with top gainers, top losers, trending stocks, recent analyses, recommendation distribution, and watchlist summary
 - NEPSE stock analysis page with historical chart, future prediction chart, technical indicators, timeframe estimate, target price, rupee move, risk note, and clear explanations
-- Watchlist and prediction history backed by SQLite through Prisma
+- Watchlist and prediction history backed by PostgreSQL through Prisma
 - Market data provider abstraction designed for future NEPSE API integration
 - Unit, API, auth, and UI smoke tests with Vitest and React Testing Library
 
@@ -18,7 +18,7 @@ This analysis is for educational and informational purposes only and should not 
 - Next.js App Router
 - TypeScript
 - Tailwind CSS
-- SQLite
+- PostgreSQL
 - Prisma ORM
 - Custom JWT auth with `jose`
 - Recharts
@@ -91,7 +91,8 @@ shareanalysis-app/
 Create `.env` from `.env.example`.
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST-pooler.REGION.aws.neon.tech/neondb?sslmode=require&pgbouncer=true"
+DIRECT_URL="postgresql://USER:PASSWORD@HOST.REGION.aws.neon.tech/neondb?sslmode=require"
 JWT_SECRET="replace-with-a-long-random-string"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 SEED_DEMO_USER_EMAIL="demo@shareanalysis.app"
@@ -106,19 +107,21 @@ SEED_DEMO_USER_PASSWORD="DemoPass123!"
 npm install
 ```
 
-2. Apply the Prisma schema:
+2. Create a PostgreSQL database.
+
+3. Apply the Prisma schema:
 
 ```bash
 npx prisma db push
 ```
 
-3. Seed demo data:
+4. Seed demo data:
 
 ```bash
 npm run seed
 ```
 
-4. Start development:
+5. Start development:
 
 ```bash
 npm run dev
@@ -144,41 +147,38 @@ npm test
 
 ## Deployment
 
-This repository is configured for Render because it currently uses SQLite. A ready-to-use [render.yaml](./render.yaml) is included.
+This repository is configured for free deployment on Vercel Hobby with a free Neon PostgreSQL database.
 
-### Render requirements
+### Requirements
 
-1. Push the repository to GitHub.
-2. Create a new Render Web Service from this repository.
-3. Use the included blueprint or match these settings manually:
-
-```yaml
-buildCommand: npm install && npx prisma generate && npm run build
-startCommand: npx prisma db push && npm run seed && npx next start -H 0.0.0.0 -p $PORT
-healthCheckPath: /login
-```
-
-4. Add a persistent disk mounted at:
-
-```text
-/opt/render/project/src/prisma/data
-```
-
-5. Set these environment variables:
+1. A Vercel account on the Hobby plan.
+2. A Neon project on the Free plan.
+3. These environment variables in Vercel:
 
 ```env
-DATABASE_URL="file:./data/prod.db"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST-pooler.REGION.aws.neon.tech/neondb?sslmode=require&pgbouncer=true"
+DIRECT_URL="postgresql://USER:PASSWORD@HOST.REGION.aws.neon.tech/neondb?sslmode=require"
 JWT_SECRET="<long-random-secret>"
-NEXT_PUBLIC_APP_URL="https://your-service-name.onrender.com"
+NEXT_PUBLIC_APP_URL="https://your-project.vercel.app"
 SEED_DEMO_USER_EMAIL="demo@shareanalysis.app"
 SEED_DEMO_USER_PASSWORD="DemoPass123!"
 ```
 
-### Why Render
+### Vercel steps
 
-- SQLite needs persistent filesystem storage.
-- Render supports persistent disks for Node services.
-- Vercel is not a good fit for this repository unless the database is migrated away from SQLite.
+1. Push the repository to GitHub.
+2. Create a Neon database and copy both the pooled connection string and the direct connection string.
+3. Import the repository into Vercel.
+4. Add the environment variables above in the Vercel project settings.
+5. Deploy.
+
+The repository includes [vercel.json](./vercel.json), which runs `prisma db push` during the Vercel build before `next build`.
+
+### Why this path
+
+- Vercel Hobby is free for personal projects.
+- Neon has a free PostgreSQL tier.
+- PostgreSQL avoids the persistent-disk problem that blocked free deployment with SQLite.
 
 ## Assumptions
 
