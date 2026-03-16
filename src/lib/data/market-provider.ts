@@ -59,6 +59,17 @@ export class MarketDataProvider {
       return MOCK_STOCKS;
     }
 
+    // Priority 1: Use live scrapers (works on Vercel)
+    try {
+      const liveStocks = await marketDataBot.enrichStocks(MOCK_STOCKS);
+      if (liveStocks.length > 0 && liveStocks.some(s => s.currentPrice > 0)) {
+        return liveStocks;
+      }
+    } catch (error) {
+      console.error("Live scrapers failed, falling back to official provider:", error);
+    }
+
+    // Priority 2: Try official provider (Python script - may not work on Vercel)
     try {
       const [securities, todayPrices] = await Promise.all([
         getOfficialSecurities(),
@@ -85,7 +96,8 @@ export class MarketDataProvider {
         };
       });
     } catch {
-      return marketDataBot.enrichStocks(MOCK_STOCKS);
+      // Priority 3: Fallback to mock data
+      return MOCK_STOCKS;
     }
   }
 
